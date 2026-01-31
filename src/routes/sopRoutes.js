@@ -271,7 +271,7 @@ router.post('/sops', async (req, res) => {
   }
 });
 
-// Get SOPs for a user
+// Get SOPs for a user (regular users - shows SOPs they created)
 router.get('/sops/user/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
@@ -306,6 +306,43 @@ router.get('/sops/user/:userId', async (req, res) => {
     res.json({ sops });
   } catch (error) {
     console.error('Error in GET /sops/user/:userId:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get ALL SOPs for caregivers (shows all SOPs in database)
+router.get('/sops/all', async (req, res) => {
+  try {
+    const { data: sops, error } = await supabase
+      .from('sops')
+      .select(`
+        *,
+        patients (
+          id,
+          name,
+          age,
+          disease_condition
+        ),
+        sop_steps (
+          id,
+          step_order,
+          time_label,
+          task_title,
+          task_description,
+          is_completed
+        )
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching all SOPs:', error);
+      return res.status(500).json({ error: 'Failed to fetch SOPs' });
+    }
+
+    console.log(`Fetched ${sops.length} SOPs for caregiver`);
+    res.json({ sops });
+  } catch (error) {
+    console.error('Error in GET /sops/all:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -431,6 +468,167 @@ router.patch('/sops/steps/:stepId/complete', async (req, res) => {
     res.json({ step });
   } catch (error) {
     console.error('Error in PATCH /sops/steps/:stepId/complete:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get patients assigned to a caregiver
+router.get('/caregiver/:caregiverId/patients', async (req, res) => {
+  try {
+    const { caregiverId } = req.params;
+
+    const { data: assignments, error } = await supabase
+      .from('caregiver_assignments')
+      .select(`
+        *,
+        patients (
+          id,
+          name,
+          age,
+          disease_condition,
+          created_at,
+          patient_medicines (
+            id,
+            medicine_name,
+            photo_url
+          )
+        )
+      `)
+      .eq('caregiver_id', caregiverId)
+      .eq('status', 'active')
+      .order('assigned_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching assigned patients:', error);
+      return res.status(500).json({ error: 'Failed to fetch assigned patients' });
+    }
+
+    // Extract patient data
+    const patients = assignments.map(a => a.patients);
+
+    res.json({ patients });
+  } catch (error) {
+    console.error('Error in GET /caregiver/:caregiverId/patients:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get ALL patients for caregivers (shows all patients in database)
+router.get('/patients/all', async (req, res) => {
+  try {
+    const { data: patients, error } = await supabase
+      .from('patients')
+      .select(`
+        id,
+        name,
+        age,
+        disease_condition,
+        created_at,
+        patient_medicines (
+          id,
+          medicine_name,
+          photo_url
+        )
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching all patients:', error);
+      return res.status(500).json({ error: 'Failed to fetch patients' });
+    }
+
+    console.log(`Fetched ${patients.length} patients for caregiver`);
+    res.json({ patients });
+  } catch (error) {
+    console.error('Error in GET /patients/all:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Assign caregiver to patient
+router.post('/caregiver/assign', async (req, res) => {
+  try {
+    const { caregiverId, patientId, assignedBy, notes } = req.body;
+
+    if (!caregiverId || !patientId) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Check if assignment already exists
+    const { data: existing } = await supabase
+      .from('caregiver_assignments')
+      .select('id, status')
+      .eq('caregiver_id', caregiverId)
+      .eq('patient_id', patientId)
+      .single();
+
+    if (existing) {
+      // If exists but inactive, reactivate it
+      if (existing.status === 'inactive') {
+        const { data: updated, error } = await supabase
+          .from('caregiver_assignments')
+          .update({ status: 'active', assigned_at: new Date().toISOString() })
+          .eq('id', existing.id)
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Error reactivating assignment:', error);
+          return res.status(500).json({ error: 'Failed to reactivate assignment' });
+        }
+
+        return res.json({ assignment: updated, message: 'Assignment reactivated' });
+      }
+
+      return res.status(409).json({ error: 'Assignment already exists' });
+    }
+
+    // Create new assignment
+    const { data: assignment, error } = await supabase
+      .from('caregiver_assignments')
+      .insert({
+        caregiver_id: caregiverId,
+        patient_id: patientId,
+        assigned_by: assignedBy || null,
+        notes: notes || null,
+        status: 'active'
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating assignment:', error);
+      return res.status(500).json({ error: 'Failed to create assignment' });
+    }
+
+    res.json({ assignment });
+  } catch (error) {
+    console.error('Error in POST /caregiver/assign:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Remove caregiver assignment
+router.delete('/caregiver/assign/:assignmentId', async (req, res) => {
+  try {
+    const { assignmentId } = req.params;
+
+    // Soft delete by setting status to inactive
+    const { data: assignment, error } = await supabase
+      .from('caregiver_assignments')
+      .update({ status: 'inactive' })
+      .eq('id', assignmentId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error removing assignment:', error);
+      return res.status(500).json({ error: 'Failed to remove assignment' });
+    }
+
+    res.json({ assignment, message: 'Assignment removed successfully' });
+  } catch (error) {
+    console.error('Error in DELETE /caregiver/assign/:assignmentId:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
