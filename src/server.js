@@ -9,6 +9,7 @@ const userRoutes = require('./routes/userRoutes');
 const prescriptionRoutes = require('./routes/prescriptionRoutes');
 const sopRoutes = require('./routes/sopRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
+const bloodTransfusionRoutes = require('./routes/bloodTransfusionRoutes');
 
 const app = express();
 
@@ -44,6 +45,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/prescriptions', prescriptionRoutes);
 app.use('/api/sop', sopRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/blood-transfusion', bloodTransfusionRoutes);
 
 // 404 handler
 app.use((req, res) => {
