@@ -7,6 +7,7 @@ const config = require('./config/config');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const prescriptionRoutes = require('./routes/prescriptionRoutes');
+const sopRoutes = require('./routes/sopRoutes');
 
 const app = express();
 
@@ -40,6 +41,7 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/prescriptions', prescriptionRoutes);
+app.use('/api/sop', sopRoutes);
 
 // 404 handler
 app.use((req, res) => {
