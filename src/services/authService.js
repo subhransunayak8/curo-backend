@@ -7,11 +7,12 @@ class AuthService {
     try {
       console.log(`Sending OTP to email: ${email}`);
 
-      // Use Supabase Auth to send OTP via email
+      // Use Supabase Auth to send OTP via email (not magic link)
       const { data, error } = await supabase.auth.signInWithOtp({
         email: email,
         options: {
           shouldCreateUser: true,
+          emailRedirectTo: undefined, // Prevent redirect, we want OTP only
         }
       });
 
@@ -23,7 +24,7 @@ class AuthService {
       console.log(`OTP sent successfully to ${email} via Supabase`);
 
       return {
-        message: 'OTP sent successfully to your email',
+        message: 'OTP sent successfully to your email. Please check your inbox for the 6-digit code.',
         email: email
       };
     } catch (error) {
