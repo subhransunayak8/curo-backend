@@ -8,6 +8,8 @@ yarn.lock
 .env.local
 *.env
 
+./.env
+
 # Logs
 logs/
 *.log

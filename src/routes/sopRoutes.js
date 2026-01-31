@@ -1,11 +1,155 @@
 const express = require('express');
 const router = express.Router();
 const { createClient } = require('@supabase/supabase-js');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const supabase = createClient(
   process.env.SUPABASE_URL, 
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
+
+// Initialize Gemini AI
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// Generate SOP using Gemini AI
+router.post('/generate', async (req, res) => {
+  try {
+    const { patientName, age, diseaseCondition, medicines } = req.body;
+
+    // Validate input
+    if (!patientName || !age || !diseaseCondition || !medicines || medicines.length === 0) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    console.log('=== GENERATING SOP ===');
+    console.log('Patient:', patientName, 'Age:', age);
+    console.log('Condition:', diseaseCondition);
+    console.log('Medicines:', medicines.join(', '));
+
+    const prompt = `
+You are a medical care planning assistant. Based on the following patient information, create a detailed Standard Operating Procedure (SOP) for caregivers.
+
+Patient Information:
+- Name: ${patientName}
+- Age: ${age}
+- Disease/Condition: ${diseaseCondition}
+- Medicines: ${medicines.join(', ')}
+
+Create a comprehensive daily care plan with specific time-based tasks. Include:
+1. Medication administration times with specific instructions
+2. Vital signs monitoring schedule
+3. Meal times and dietary considerations
+4. Physical activity or therapy sessions
+5. Personal care tasks (bathing, grooming, etc.)
+6. Rest periods
+7. Any condition-specific care requirements
+
+Return ONLY a JSON object with this exact structure (no other text):
+
+{
+  "sopSteps": [
+    {
+      "stepOrder": 1,
+      "timeLabel": "07:00 AM",
+      "taskTitle": "Morning Medication",
+      "taskDescription": "Administer [medicine name] with water before breakfast. Monitor for any side effects."
+    },
+    {
+      "stepOrder": 2,
+      "timeLabel": "07:30 AM",
+      "taskTitle": "Breakfast",
+      "taskDescription": "Provide balanced breakfast. Ensure adequate hydration."
+    }
+  ]
+}
+
+Instructions:
+- Create 8-12 tasks covering a full day (morning to night)
+- Use specific times (e.g., "07:00 AM", "12:00 PM", "08:00 PM")
+- Make task titles concise (3-5 words)
+- Make descriptions detailed and actionable
+- Include all medicines from the list
+- Consider the patient's age and condition
+- Add monitoring and safety checks
+- Return ONLY the JSON object, no markdown or additional text
+    `.trim();
+
+    // Get Gemini model
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+    console.log('Sending request to Gemini API...');
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+
+    if (!text) {
+      throw new Error('Empty response from Gemini API');
+    }
+
+    console.log('=== RAW RESPONSE (first 500 chars) ===');
+    console.log(text.substring(0, 500));
+
+    // Clean the response
+    let cleanJson = text.trim();
+
+    // Remove markdown code blocks
+    if (cleanJson.includes('```')) {
+      cleanJson = cleanJson
+        .replace(/```json/g, '')
+        .replace(/```JSON/g, '')
+        .replace(/```/g, '')
+        .trim();
+    }
+
+    // Find JSON object boundaries
+    const jsonStart = cleanJson.indexOf('{');
+    const jsonEnd = cleanJson.lastIndexOf('}') + 1;
+
+    if (jsonStart === -1 || jsonEnd <= jsonStart) {
+      console.error('No valid JSON found in response');
+      console.error('Full response:', cleanJson);
+      throw new Error('No valid JSON found in API response');
+    }
+
+    cleanJson = cleanJson.substring(jsonStart, jsonEnd);
+
+    console.log('=== CLEANED JSON (first 500 chars) ===');
+    console.log(cleanJson.substring(0, 500));
+
+    // Parse JSON
+    let sopResponse;
+    try {
+      sopResponse = JSON.parse(cleanJson);
+    } catch (parseError) {
+      console.error('JSON PARSE ERROR:', parseError);
+      console.error('Failed JSON:', cleanJson.substring(0, 200));
+      throw new Error('Could not parse AI response. Check logs for details.');
+    }
+
+    if (!sopResponse || !sopResponse.sopSteps || sopResponse.sopSteps.length === 0) {
+      throw new Error('No SOP steps generated');
+    }
+
+    console.log('=== SUCCESS ===');
+    console.log('Generated', sopResponse.sopSteps.length, 'steps');
+
+    res.json({
+      sopSteps: sopResponse.sopSteps,
+      rawResponse: cleanJson
+    });
+
+  } catch (error) {
+    console.error('=== ERROR GENERATING SOP ===');
+    console.error('Error type:', error.constructor.name);
+    console.error('Error message:', error.message);
+    console.error('Stack:', error.stack);
+    
+    res.status(500).json({ 
+      error: 'Failed to generate SOP',
+      message: error.message 
+    });
+  }
+});
 
 // Create patient with medicines
 router.post('/patients', async (req, res) => {
