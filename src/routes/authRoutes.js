@@ -9,6 +9,7 @@ router.post('/register',
   body('email').isEmail().withMessage('Invalid email format'),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
   body('name').optional().trim(),
+  body('role').optional().isIn(['user', 'caregiver']).withMessage('Invalid role'),
   async (req, res) => {
     try {
       const errors = validationResult(req);
@@ -16,8 +17,8 @@ router.post('/register',
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { email, password, name } = req.body;
-      const result = await authService.register(email, password, name);
+      const { email, password, name, role } = req.body;
+      const result = await authService.register(email, password, name, role);
       res.json(result);
     } catch (error) {
       console.error('Error in register:', error);

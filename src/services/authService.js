@@ -4,9 +4,9 @@ const bcrypt = require('bcryptjs');
 const config = require('../config/config');
 
 class AuthService {
-  async register(email, password, name = null) {
+  async register(email, password, name = null, role = 'user') {
     try {
-      console.log(`Registering new user: ${email}`);
+      console.log(`Registering new user: ${email} with role: ${role}`);
 
       // Check if user already exists (using admin client to bypass RLS)
       const { data: existingUser } = await supabaseAdmin
@@ -29,7 +29,7 @@ class AuthService {
           email,
           password_hash: passwordHash,
           full_name: name,
-          role: 'user',
+          role: role,  // Use the role parameter
           created_at: new Date().toISOString()
         })
         .select()
@@ -37,7 +37,7 @@ class AuthService {
 
       if (error) throw error;
 
-      console.log(`User registered successfully: ${email}`);
+      console.log(`User registered successfully: ${email} with role: ${role}`);
 
       // Create JWT token
       const accessToken = this.createAccessToken(newUser.id, newUser.email);
