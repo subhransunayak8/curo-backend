@@ -1,115 +1,97 @@
 const { supabase } = require('../config/supabase');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const config = require('../config/config');
-const emailService = require('./emailService');
 
 class AuthService {
-  generateOTP() {
-    // Generate 6-digit OTP
-    return Math.floor(100000 + Math.random() * 900000).toString();
-  }
-
-  async sendOTP(email) {
+  async register(email, password, name = null) {
     try {
-      console.log(`Sending OTP to email: ${email}`);
+      console.log(`Registering new user: ${email}`);
 
-      const otp = this.generateOTP();
-      const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+      // Check if user already exists
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', email)
+        .single();
 
-      // Delete existing OTPs for this email
-      await supabase
-        .from('email_otps')
-        .delete()
-        .eq('email', email);
+      if (existingUser) {
+        throw new Error('User with this email already exists');
+      }
 
-      // Store new OTP in database
-      const { error: insertError } = await supabase
-        .from('email_otps')
+      // Hash password
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      // Create user
+      const { data: newUser, error } = await supabase
+        .from('users')
         .insert({
           email,
-          otp,
-          expires_at: expiresAt.toISOString(),
-          is_verified: false,
+          password_hash: passwordHash,
+          name,
+          role: 'user',
           created_at: new Date().toISOString()
-        });
+        })
+        .select()
+        .single();
 
-      if (insertError) {
-        console.error('Error storing OTP:', insertError);
-        throw insertError;
-      }
+      if (error) throw error;
 
-      console.log(`OTP stored in database for ${email}`);
+      console.log(`User registered successfully: ${email}`);
 
-      // Send OTP via email using Nodemailer
-      const emailSent = await emailService.sendOTPEmail(email, otp);
+      // Create JWT token
+      const accessToken = this.createAccessToken(newUser.id, newUser.email);
 
-      if (!emailSent) {
-        console.warn(`Failed to send OTP email to ${email}, but OTP is stored in DB`);
-      } else {
-        console.log(`OTP email sent successfully to ${email}`);
-      }
-
-      const result = {
-        message: 'A 6-digit verification code has been sent to your email. Please check your inbox.',
-        email: email
+      return {
+        access_token: accessToken,
+        token_type: 'bearer',
+        user_id: newUser.id,
+        email: newUser.email,
+        name: newUser.name
       };
-
-      // In development, include OTP in response for testing
-      if (config.nodeEnv === 'development') {
-        result.otp = otp;
-        console.log(`DEBUG MODE: OTP for ${email} is ${otp}`);
-      }
-
-      return result;
     } catch (error) {
-      console.error('Error sending OTP:', error);
+      console.error('Error registering user:', error);
       throw error;
     }
   }
 
-  async verifyOTP(email, otp) {
+  async login(email, password) {
     try {
-      console.log(`Verifying OTP for email: ${email}`);
+      console.log(`Login attempt for: ${email}`);
 
-      // Get OTP from database
-      const { data, error } = await supabase
-        .from('email_otps')
+      // Get user by email
+      const { data: user, error } = await supabase
+        .from('users')
         .select('*')
         .eq('email', email)
-        .eq('otp', otp)
-        .eq('is_verified', false)
         .single();
 
-      if (error || !data) {
-        console.warn(`Invalid OTP attempt for ${email}`);
-        return null;
+      if (error || !user) {
+        throw new Error('Invalid email or password');
       }
 
-      // Check if expired
-      const expiresAt = new Date(data.expires_at);
-      if (new Date() > expiresAt) {
-        console.warn(`Expired OTP attempt for ${email}`);
-        return null;
+      // Verify password
+      const isValidPassword = await bcrypt.compare(password, user.password_hash);
+
+      if (!isValidPassword) {
+        throw new Error('Invalid email or password');
       }
 
-      // Mark as verified
-      await supabase
-        .from('email_otps')
-        .update({ is_verified: true })
-        .eq('id', data.id);
+      console.log(`User logged in successfully: ${email}`);
 
-      console.log(`OTP verified successfully for ${email}`);
+      // Create JWT token
+      const accessToken = this.createAccessToken(user.id, user.email);
 
-      // Return user data in format expected by routes
       return {
-        user: {
-          id: data.id,
-          email: email
-        }
+        access_token: accessToken,
+        token_type: 'bearer',
+        user_id: user.id,
+        email: user.email,
+        name: user.name
       };
     } catch (error) {
-      console.error('Error verifying OTP:', error);
-      return null;
+      console.error('Error logging in:', error);
+      throw error;
     }
   }
 

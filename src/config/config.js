@@ -32,10 +32,5 @@ module.exports = {
   
   cors: {
     allowedOrigins: process.env.ALLOWED_ORIGINS || '*'
-  },
-  
-  email: {
-    user: process.env.EMAIL_USER,
-    password: process.env.EMAIL_PASSWORD
   }
 };

@@ -2,7 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 const config = require('./config/config');
-const emailService = require('./services/emailService');
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
@@ -24,7 +23,8 @@ app.get('/', (req, res) => {
   res.json({
     message: 'CURA Backend API',
     version: '1.0.0',
-    status: 'healthy'
+    status: 'healthy',
+    auth: 'email/password'
   });
 });
 
@@ -54,19 +54,11 @@ app.use((err, req, res, next) => {
 
 // Start server
 const PORT = config.port;
-app.listen(PORT, async () => {
+app.listen(PORT, () => {
   console.log(`🚀 CURA Backend running on port ${PORT}`);
   console.log(`📝 Environment: ${config.nodeEnv}`);
   console.log(`🔗 API: http://localhost:${PORT}`);
-  
-  // Verify email service connection
-  console.log('📧 Verifying email service...');
-  const emailReady = await emailService.verifyConnection();
-  if (emailReady) {
-    console.log('✅ Email service is ready');
-  } else {
-    console.log('⚠️  Email service connection failed - check EMAIL_USER and EMAIL_PASSWORD');
-  }
+  console.log(`🔐 Auth: Email/Password`);
 });
 
 module.exports = app;
