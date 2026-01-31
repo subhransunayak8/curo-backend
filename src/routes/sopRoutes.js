@@ -454,7 +454,9 @@ router.patch('/sops/steps/:stepId/complete', async (req, res) => {
       .from('sop_steps')
       .update({
         is_completed: isCompleted,
-        completed_at: isCompleted ? new Date().toISOString() : null
+        completed_at: isCompleted ? new Date().toISOString() : null,
+        validation_status: isCompleted ? 'approved' : 'pending',
+        validation_message: isCompleted ? 'Task completed on time' : null
       })
       .eq('id', stepId)
       .select()
@@ -468,6 +470,37 @@ router.patch('/sops/steps/:stepId/complete', async (req, res) => {
     res.json({ step });
   } catch (error) {
     console.error('Error in PATCH /sops/steps/:stepId/complete:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Mark SOP step as rejected
+router.patch('/sops/steps/:stepId/reject', async (req, res) => {
+  try {
+    const { stepId } = req.params;
+    const { rejectionReason } = req.body;
+
+    const { data: step, error } = await supabase
+      .from('sop_steps')
+      .update({
+        validation_status: 'rejected',
+        validation_message: rejectionReason || 'Time mismatch',
+        rejected_at: new Date().toISOString(),
+        rejection_count: supabase.raw('rejection_count + 1'),
+        is_completed: false
+      })
+      .eq('id', stepId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error marking step as rejected:', error);
+      return res.status(500).json({ error: 'Failed to mark step as rejected' });
+    }
+
+    res.json({ step });
+  } catch (error) {
+    console.error('Error in PATCH /sops/steps/:stepId/reject:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
