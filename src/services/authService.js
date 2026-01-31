@@ -28,7 +28,7 @@ class AuthService {
         .insert({
           email,
           password_hash: passwordHash,
-          name,
+          full_name: name,
           role: 'user',
           created_at: new Date().toISOString()
         })
@@ -47,7 +47,7 @@ class AuthService {
         token_type: 'bearer',
         user_id: newUser.id,
         email: newUser.email,
-        name: newUser.name
+        name: newUser.full_name
       };
     } catch (error) {
       console.error('Error registering user:', error);
@@ -87,7 +87,7 @@ class AuthService {
         token_type: 'bearer',
         user_id: user.id,
         email: user.email,
-        name: user.name
+        name: user.full_name
       };
     } catch (error) {
       console.error('Error logging in:', error);

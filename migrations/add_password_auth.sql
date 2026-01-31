@@ -10,7 +10,12 @@ DROP TABLE IF EXISTS otp_verifications;
 ALTER TABLE users 
 ALTER COLUMN email SET NOT NULL;
 
+-- Make phone optional (was required before)
+ALTER TABLE users 
+ALTER COLUMN phone DROP NOT NULL;
+
 -- Ensure indexes exist
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
 COMMENT ON COLUMN users.password_hash IS 'Bcrypt hashed password';
+COMMENT ON COLUMN users.full_name IS 'User full name';
