@@ -1,4 +1,4 @@
-const { supabase } = require('../config/supabase');
+const { supabase, supabaseAdmin } = require('../config/supabase');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const config = require('../config/config');
@@ -8,8 +8,8 @@ class AuthService {
     try {
       console.log(`Registering new user: ${email}`);
 
-      // Check if user already exists
-      const { data: existingUser } = await supabase
+      // Check if user already exists (using admin client to bypass RLS)
+      const { data: existingUser } = await supabaseAdmin
         .from('users')
         .select('id')
         .eq('email', email)
@@ -22,8 +22,8 @@ class AuthService {
       // Hash password
       const passwordHash = await bcrypt.hash(password, 10);
 
-      // Create user
-      const { data: newUser, error } = await supabase
+      // Create user (using admin client to bypass RLS)
+      const { data: newUser, error } = await supabaseAdmin
         .from('users')
         .insert({
           email,
@@ -59,8 +59,8 @@ class AuthService {
     try {
       console.log(`Login attempt for: ${email}`);
 
-      // Get user by email
-      const { data: user, error } = await supabase
+      // Get user by email (using admin client to bypass RLS)
+      const { data: user, error } = await supabaseAdmin
         .from('users')
         .select('*')
         .eq('email', email)
